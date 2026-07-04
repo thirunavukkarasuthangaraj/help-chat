@@ -278,6 +278,10 @@
         '    align-self: flex-start; background: #f1f5f5; color: var(--hc-ink);\n' +
         '    border-bottom-left-radius: 4px;\n' +
         '  }\n' +
+        '  .hc-msg a {\n' +
+        '    color: var(--hc-primary); text-decoration: underline;\n' +
+        '    word-break: break-all;\n' +
+        '  }\n' +
         '  .hc-msg.typing::after {\n' +
         '    content: \'\\25CF\\25CF\\25CF\'; letter-spacing: 3px; color: var(--hc-mut);\n' +
         '    animation: hcPulse 1.2s infinite;\n' +
@@ -359,10 +363,35 @@
       var div = document.createElement('div');
       div.className = 'hc-msg ' + role;
       div.textContent = text;
+      if (role === 'assistant' && text) this._linkify(div);
       this.$('.hc-msgs').appendChild(div);
       this._scrollDown();
       if (text) this._emit('helpchat:message', { role: role, text: text });
       return div;
+    }
+
+    /**
+     * Make URLs in an assistant message clickable (docs can link to guides,
+     * forms, PDFs, downloads...). Builds DOM nodes — never injects HTML, so
+     * message content can't break out of the bubble.
+     */
+    _linkify(el) {
+      var text = el.textContent;
+      if (!/https?:\/\//.test(text)) return;
+      el.textContent = '';
+      var re = /(https?:\/\/[^\s<>"')\]]+)/g;
+      var last = 0, m;
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+        var a = document.createElement('a');
+        a.href = m[0];
+        a.textContent = m[0];
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        el.appendChild(a);
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
     }
 
     _scrollDown() {
@@ -433,6 +462,7 @@
           reply.classList.remove('typing');
           reply.textContent = 'No response received. Please try again.';
         } else if (reply.textContent) {
+          this._linkify(reply);
           this._emit('helpchat:message', { role: 'assistant', text: reply.textContent });
         }
       } catch (e) {
