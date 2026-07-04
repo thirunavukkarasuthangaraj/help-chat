@@ -82,6 +82,22 @@ Your own engine: implement `AnswerProvider` (one method) — e.g. call your
 existing FAQ service or database — and select it in `ChatService`. The widget
 and API don't change.
 
+## Storage backends (helpchat.storage)
+
+Every deployment can use its own database — pick one with a single env var;
+nothing else changes:
+
+| Backend | Config | Best for |
+|---|---|---|
+| `memory` (default) | nothing to set | dev/test, small sites. History lost on restart. Apps registered in `InMemoryAppConfigStore`. |
+| `jdbc` | `HELPCHAT_STORAGE=jdbc`, `HELPCHAT_DB_URL=jdbc:mysql://host/helpchat` (or `jdbc:postgresql://...`), `HELPCHAT_DB_USER`, `HELPCHAT_DB_PASSWORD` | clients with MySQL / PostgreSQL / MariaDB. Run `scripts/db/schema.sql` once. Onboard apps by INSERTing a row — no rebuild, no restart. |
+| `dynamodb` | `HELPCHAT_STORAGE=dynamodb` + standard AWS credentials/region | AWS deployments. Run `scripts/db/dynamodb-create-tables.sh` once. Native TTL cleans up history automatically. |
+
+With `jdbc`/`dynamodb`, chat history survives restarts and app onboarding is a
+database row instead of a code change. Help-docs files can also live **outside
+the jar**: drop `myapp.md` into the folder set by `HELPCHAT_DOCS_DIR`
+(default `./docs` next to the jar) — edit answers anytime without rebuilding.
+
 ## Integration — clean steps
 
 Adding help chat to any application is always the same 3 phases:

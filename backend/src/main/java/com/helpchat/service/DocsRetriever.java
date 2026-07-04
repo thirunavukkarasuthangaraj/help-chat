@@ -1,9 +1,12 @@
 package com.helpchat.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,13 +15,21 @@ import java.util.concurrent.ConcurrentHashMap;
  * sections by "## " headings, and scores sections by keyword overlap with
  * the user's question. Returns the top N sections as context.
  *
- * PRODUCTION: replace with OpenSearch hybrid (BM25 + vector) retrieval,
- * one index per appKey. This class is the only thing you need to swap.
+ * Docs are looked up in two places (first match wins):
+ *   1. External folder ${helpchat.docs-dir} (default ./docs next to the jar) —
+ *      lets clients add or edit docs files without rebuilding the service.
+ *   2. The classpath (resources/docs/*.md bundled in the jar).
+ *
+ * PRODUCTION option: replace with OpenSearch hybrid (BM25 + vector)
+ * retrieval, one index per appKey. This class is the only swap point.
  */
 @Service
 public class DocsRetriever {
 
     private final Map<String, List<String>> cache = new ConcurrentHashMap<>();
+
+    @Value("${helpchat.docs-dir:./docs}")
+    private String docsDir;
 
     public String retrieve(String docsFile, String question, int topN) {
         List<String> chunks = cache.computeIfAbsent(docsFile, this::loadChunks);
@@ -36,9 +47,8 @@ public class DocsRetriever {
 
     private List<String> loadChunks(String docsFile) {
         try {
-            String text = new String(
-                    new ClassPathResource(docsFile).getInputStream().readAllBytes(),
-                    StandardCharsets.UTF_8);
+            String text = readDocsFile(docsFile);
+            if (text == null) return List.of();
             List<String> chunks = new ArrayList<>();
             for (String section : text.split("(?m)^## ")) {
                 String s = section.strip();
@@ -48,6 +58,21 @@ public class DocsRetriever {
         } catch (Exception e) {
             return List.of();
         }
+    }
+
+    /** External docs folder first (editable without rebuild), then classpath. */
+    private String readDocsFile(String docsFile) throws Exception {
+        // "docs/myapp.md" → <docs-dir>/myapp.md ; bare names work too
+        String fileName = docsFile.startsWith("docs/") ? docsFile.substring(5) : docsFile;
+        Path external = Path.of(docsDir, fileName);
+        if (Files.isRegularFile(external)) {
+            return Files.readString(external, StandardCharsets.UTF_8);
+        }
+        ClassPathResource cp = new ClassPathResource(docsFile);
+        if (cp.exists()) {
+            return new String(cp.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        }
+        return null;
     }
 
     private Set<String> tokenize(String text) {

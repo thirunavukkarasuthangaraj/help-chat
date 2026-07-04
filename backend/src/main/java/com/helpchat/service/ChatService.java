@@ -53,8 +53,8 @@ public class ChatService {
         String reply = answerProvider().answer(app, docsContext, history, onDelta);
 
         // 4. Persist the turn
-        sessions.append(sessionId, new ChatMessage("user", userMessage));
-        sessions.append(sessionId, new ChatMessage("assistant", reply));
+        sessions.append(app.appKey(), sessionId, new ChatMessage("user", userMessage));
+        sessions.append(app.appKey(), sessionId, new ChatMessage("assistant", reply));
     }
 
     private AnswerProvider answerProvider() {

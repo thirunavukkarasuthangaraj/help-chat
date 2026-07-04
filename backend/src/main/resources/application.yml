@@ -7,6 +7,22 @@ helpchat:
   # services, no API keys) or "claude" (optional AI answers, needs the key below)
   provider: ${HELPCHAT_PROVIDER:docs}
 
+  # Storage backend — each deployment/client can use its own database:
+  #   memory   (default) in-JVM, zero setup, history lost on restart
+  #   jdbc     any SQL DB (MySQL/PostgreSQL/MariaDB/H2) — run scripts/db/schema.sql
+  #   dynamodb AWS — run scripts/db/dynamodb-create-tables.sh
+  storage: ${HELPCHAT_STORAGE:memory}
+
+  # Only used when storage=jdbc
+  db:
+    url: ${HELPCHAT_DB_URL:}
+    username: ${HELPCHAT_DB_USER:}
+    password: ${HELPCHAT_DB_PASSWORD:}
+
+  # Help-docs folder outside the jar (editable without rebuild).
+  # Falls back to the bundled resources/docs/ when a file isn't found here.
+  docs-dir: ${HELPCHAT_DOCS_DIR:./docs}
+
   # Only used when provider=claude. Set via environment variable: ANTHROPIC_API_KEY
   anthropic-api-key: ${ANTHROPIC_API_KEY:}
   model: claude-sonnet-4-5
