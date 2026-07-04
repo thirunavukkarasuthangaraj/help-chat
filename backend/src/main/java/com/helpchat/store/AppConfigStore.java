@@ -37,6 +37,27 @@ public class AppConfigStore {
                 "docs/demo.md"
         ));
 
+        // ---- GHSS Mittur school website ----
+        apps.put("mitturschool", new AppConfig(
+                "mitturschool",
+                "GHSS Mittur",
+                "#1a5d1a",
+                "Vanakkam! I'm the GHSS Mittur help assistant. Ask me about admission, contact, facilities, or events.",
+                List.of("How do I apply for admission?",
+                        "What is the school's phone number?",
+                        "What facilities does the school have?"),
+                """
+                You are a friendly, concise help assistant for GHSS Mittur
+                (Government Higher Secondary School, Mittur, Tamil Nadu).
+                Rules:
+                - Answer ONLY using the provided help documentation context.
+                - If the answer is not in the docs, say you don't have that information
+                  and suggest calling the school office.
+                - Keep answers short and simple.
+                """,
+                "docs/mitturschool.md"
+        ));
+
         // ---- Add your real apps below, e.g. ----
         // apps.put("myapp-web", new AppConfig("myapp-web", "My App", "#0d7377", ...));
     }

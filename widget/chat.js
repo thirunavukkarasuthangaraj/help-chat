@@ -431,7 +431,26 @@
 
         var reader = res.body.getReader();
         var decoder = new TextDecoder();
-        var buffer = '', eventName = '';
+        var buffer = '', eventName = '', dataLines = [];
+        var self = this;
+
+        // Per the SSE spec: an event ends at a blank line, and multiple
+        // data: lines within one event are joined with "\n". This preserves
+        // line breaks inside answers.
+        var dispatch = function () {
+          if (!dataLines.length) return;
+          var data = dataLines.join('\n');
+          dataLines = [];
+          if (eventName === 'delta') {
+            reply.classList.remove('typing');
+            reply.textContent += data;
+            self._scrollDown();
+          } else if (eventName === 'error') {
+            reply.classList.remove('typing');
+            reply.textContent = data || 'Something went wrong. Please try again.';
+            self._emit('helpchat:error', { message: reply.textContent });
+          }
+        };
 
         while (true) {
           var chunk = await reader.read();
@@ -442,22 +461,16 @@
           while ((idx = buffer.indexOf('\n')) >= 0) {
             var line = buffer.slice(0, idx).replace(/\r$/, '');
             buffer = buffer.slice(idx + 1);
-            if (line.indexOf('event:') === 0) {
+            if (line === '') {
+              dispatch();
+            } else if (line.indexOf('event:') === 0) {
               eventName = line.slice(6).trim();
             } else if (line.indexOf('data:') === 0) {
-              var data = line.slice(5).replace(/^ /, '');
-              if (eventName === 'delta') {
-                reply.classList.remove('typing');
-                reply.textContent += data;
-                this._scrollDown();
-              } else if (eventName === 'error') {
-                reply.classList.remove('typing');
-                reply.textContent = data || 'Something went wrong. Please try again.';
-                this._emit('helpchat:error', { message: reply.textContent });
-              }
+              dataLines.push(line.slice(5).replace(/^ /, ''));
             }
           }
         }
+        dispatch();
         if (reply.classList.contains('typing')) {
           reply.classList.remove('typing');
           reply.textContent = 'No response received. Please try again.';
