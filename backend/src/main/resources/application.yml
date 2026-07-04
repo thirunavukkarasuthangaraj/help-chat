@@ -34,3 +34,5 @@ helpchat:
   history-limit: 10
   # Max characters per user message
   max-message-length: 2000
+  # Max messages per minute per client (sessionId+IP). 0 disables.
+  rate-limit-per-minute: ${HELPCHAT_RATE_LIMIT:20}

@@ -1,9 +1,11 @@
 package com.helpchat.controller;
 
+import com.helpchat.config.RateLimiter;
 import com.helpchat.model.Models.AppConfig;
 import com.helpchat.model.Models.ChatRequest;
 import com.helpchat.service.ChatService;
 import com.helpchat.store.AppConfigStore;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,14 +23,24 @@ public class ChatController {
 
     private final AppConfigStore apps;
     private final ChatService chatService;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final RateLimiter rateLimiter;
+    // bounded: one thread per in-flight SSE reply, capped so a flood can't
+    // exhaust server threads
+    private final ExecutorService executor = Executors.newFixedThreadPool(64);
 
     @Value("${helpchat.max-message-length}")
     private int maxMessageLength;
 
-    public ChatController(AppConfigStore apps, ChatService chatService) {
+    public ChatController(AppConfigStore apps, ChatService chatService, RateLimiter rateLimiter) {
         this.apps = apps;
         this.chatService = chatService;
+        this.rateLimiter = rateLimiter;
+    }
+
+    /** Liveness probe for load balancers / uptime monitors. */
+    @GetMapping("/health")
+    public Map<String, String> health() {
+        return Map.of("status", "ok");
     }
 
     /** Widget bootstrap: theme, welcome message, suggested questions. */
@@ -52,13 +64,19 @@ public class ChatController {
      * The widget POSTs {appKey, sessionId, message} and reads text/event-stream.
      */
     @PostMapping(value = "/message", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter message(@RequestBody ChatRequest req) {
+    public SseEmitter message(@RequestBody ChatRequest req, HttpServletRequest http) {
         SseEmitter emitter = new SseEmitter(120_000L);
 
         AppConfig app = (req.appKey() == null) ? null : apps.get(req.appKey());
         if (app == null || req.sessionId() == null || req.message() == null
                 || req.message().isBlank() || req.message().length() > maxMessageLength) {
             emitSafely(emitter, "error", "Invalid request.");
+            emitter.complete();
+            return emitter;
+        }
+
+        if (!rateLimiter.allow(req.sessionId() + "|" + http.getRemoteAddr())) {
+            emitSafely(emitter, "error", "You're sending messages too quickly. Please wait a moment.");
             emitter.complete();
             return emitter;
         }

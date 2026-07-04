@@ -26,13 +26,22 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class DocsRetriever {
 
-    private final Map<String, List<String>> cache = new ConcurrentHashMap<>();
+    private record CachedDocs(List<String> chunks, long loadedAt) {}
+
+    /** Reload docs at most once a minute, so external edits apply without restart. */
+    private static final long CACHE_TTL_MILLIS = 60_000;
+
+    private final Map<String, CachedDocs> cache = new ConcurrentHashMap<>();
 
     @Value("${helpchat.docs-dir:./docs}")
     private String docsDir;
 
     public String retrieve(String docsFile, String question, int topN) {
-        List<String> chunks = cache.computeIfAbsent(docsFile, this::loadChunks);
+        long now = System.currentTimeMillis();
+        List<String> chunks = cache.compute(docsFile, (k, cur) ->
+                (cur == null || now - cur.loadedAt() > CACHE_TTL_MILLIS)
+                        ? new CachedDocs(loadChunks(k), now)
+                        : cur).chunks();
         if (chunks.isEmpty()) return "";
 
         Set<String> qTokens = tokenize(question);

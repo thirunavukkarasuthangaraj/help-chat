@@ -247,12 +247,27 @@ those two classes to JDBC/DynamoDB when you're ready, the rest is unchanged.
 | `/chat/config/{appKey}` | GET | Widget bootstrap: theme, welcome, suggested questions |
 | `/chat/message` | POST | Body `{appKey, sessionId, message}` → SSE stream of `delta` events, ending with `done` |
 
-## Production hardening checklist
+## Built-in protections (already on)
 
-- [ ] Replace `AppConfigStore` map with DynamoDB table `chat_apps`
-- [ ] Replace `SessionStore` map with DynamoDB table `chat_sessions` (TTL attribute)
-- [ ] Replace `DocsRetriever` keyword matching with OpenSearch hybrid (BM25 + embeddings), one index per appKey
-- [ ] Set `helpchat.allowed-origins` to your real domains (remove `*`)
-- [ ] Add rate limiting per sessionId/IP (e.g., bucket4j or API Gateway)
-- [ ] Serve `chat.js` from CDN as versioned `chat.v1.js`
-- [ ] Add 👍/👎 feedback logging and an "unanswered questions" log
+- **Rate limiting** — max 20 messages/minute per client (sessionId+IP);
+  tune with `HELPCHAT_RATE_LIMIT`, 0 disables
+- **Message length cap** (2000 chars) and request validation
+- **Bounded worker pool** (64 concurrent replies) — a flood can't exhaust threads
+- **Health endpoint** — `GET /chat/health` for load balancers / uptime monitors
+- **Unanswered-question log** — every miss logs `UNANSWERED appKey=... question=...`;
+  review it to learn what to add to your docs
+- **Small-talk handling** — hi/hello/vanakkam/thanks get friendly replies
+  instead of the fallback
+- **Docs hot-reload** — external docs edits apply within 60 s, no restart
+- **Safe rendering** — Shadow DOM isolation; links built as DOM nodes (no HTML injection)
+
+## Production checklist (do before going live)
+
+- [ ] Set `HELPCHAT_ALLOWED_ORIGINS` to your real domains (remove `*`)
+- [ ] Serve over HTTPS (an https page cannot call an http backend — mixed content)
+- [ ] Pick storage: `HELPCHAT_STORAGE=jdbc` or `dynamodb` so history and app
+      registry survive restarts and multiple instances
+- [ ] Serve `chat.js` from a CDN as versioned `chat.v2.js`
+- [ ] Optional: replace `DocsRetriever` keyword matching with OpenSearch
+      hybrid (BM25 + embeddings) if docs grow very large
+- [ ] Optional: 👍/👎 feedback endpoint (schema table `chat_feedback` is ready)
