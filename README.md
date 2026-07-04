@@ -31,13 +31,19 @@ help-chat/
 │       └── resources/
 │           ├── application.yml
 │           └── docs/demo.md                     sample help documentation
-└── widget/
-    ├── chat.js              embeddable widget (no dependencies, Shadow DOM)
-    ├── demo.html            test page — a fake "host application"
-    └── integrations/
-        ├── README.md                    how to plug into every host type
-        ├── react/HelpChatWidget.jsx     drop-in React component
-        └── angular/help-chat.service.ts drop-in Angular service
+├── widget/
+│   ├── chat.js              embeddable widget (no dependencies, Shadow DOM)
+│   ├── demo.html            test page — a fake "host application"
+│   └── integrations/
+│       ├── README.md                    how to plug into every host type
+│       ├── react/HelpChatWidget.jsx     drop-in React component
+│       └── angular/help-chat.service.ts drop-in Angular service
+└── scripts/
+    ├── start-dev.ps1 / .sh  start backend + widget demo together
+    ├── new-app.ps1          scaffold a new application (docs + config snippet)
+    └── db/
+        ├── schema.sql                   MySQL tables (apps, messages, feedback)
+        └── dynamodb-create-tables.sh    DynamoDB tables + 24h TTL (AWS)
 ```
 
 ## Run it (5 minutes)
@@ -76,60 +82,146 @@ Your own engine: implement `AnswerProvider` (one method) — e.g. call your
 existing FAQ service or database — and select it in `ChatService`. The widget
 and API don't change.
 
-## Add the widget to YOUR app
+## Integration — clean steps
 
-Full per-framework guide (React, Angular, Vue, Android/iOS WebView, JS API,
-events): **[widget/integrations/README.md](widget/integrations/README.md)**. Short version:
+Adding help chat to any application is always the same 3 phases:
 
-**Plain HTML** — one line before `</body>`:
+```
+PHASE A (once)         PHASE B (per application)        PHASE C (in the app)
+run the backend   →    register appKey + write docs  →  embed the widget
+```
+
+### Phase A — run the backend (once, shared by all apps)
+
+1. `cd backend`
+2. `mvn spring-boot:run`
+3. Verify: open http://localhost:8090/chat/config/demo — you should see JSON.
+
+In production, deploy this service once (EC2/ECS/etc.) and point every app at
+its URL, e.g. `https://chat.yourdomain.com`.
+
+### Phase B — register your application (per app, backend side)
+
+1. Open `backend/src/main/java/com/helpchat/store/AppConfigStore.java` and add
+   one entry: `appKey`, app name, theme color, welcome message, suggested
+   questions, system prompt, docs file name.
+2. Create `backend/src/main/resources/docs/<appkey>.md`. Each `## Heading`
+   section is one answer — write headings the way users would ask:
+
+   ```markdown
+   ## How do I reset my password?
+   Click "Forgot password" on the sign-in page...
+
+   ## What are the pricing plans?
+   We offer three plans...
+   ```
+
+3. Restart the backend. Verify: http://localhost:8090/chat/config/<appkey>
+
+### Phase C — embed the widget (per app, frontend side)
+
+Pick the ONE that matches your app. In every case you only need two values:
+your `appKey` (from Phase B) and the backend URL (from Phase A).
+
+#### C1. Plain HTML / static website
+
+1. Copy `widget/chat.js` into your site (or serve it from a CDN).
+2. Add one line before `</body>`:
+
+   ```html
+   <script src="chat.js" data-app-key="myapp" data-api-url="https://chat.yourdomain.com"></script>
+   ```
+
+Done — the bubble appears bottom-right.
+
+#### C2. Angular
+
+1. Copy `widget/chat.js` → `src/assets/chat.js`.
+2. Copy `widget/integrations/angular/help-chat.service.ts` → `src/app/help-chat.service.ts`.
+3. In `AppComponent` (or wherever you want it to start):
+
+   ```ts
+   constructor(private helpChat: HelpChatService) {}
+
+   ngOnInit() {
+     this.helpChat.init({ appKey: 'myapp', apiUrl: 'https://chat.yourdomain.com' });
+   }
+   ```
+
+Done. Optional: `this.helpChat.identify({ id: userId })`, `open()`, `messages$`.
+
+#### C3. React
+
+1. Copy `widget/chat.js` → `public/chat.js`.
+2. Copy `widget/integrations/react/HelpChatWidget.jsx` → `src/HelpChatWidget.jsx`.
+3. Render it once, e.g. in `App.jsx`:
+
+   ```jsx
+   <HelpChatWidget appKey="myapp" apiUrl="https://chat.yourdomain.com" />
+   ```
+
+Done. Optional props: `user`, `headers`, `onMessage`, `position`.
+
+#### C4. Vue / Svelte / any other framework
+
+1. Load `chat.js` (script tag or `import './chat.js'`).
+2. Use the standard custom element anywhere in a template:
+
+   ```html
+   <help-chat app-key="myapp" api-url="https://chat.yourdomain.com"></help-chat>
+   ```
+
+(Vue: add `help-chat` to `compilerOptions.isCustomElement`.)
+
+#### C5. Hybrid mobile (Android WebView / iOS WKWebView)
+
+1. Host a tiny page (or bundle it in the app):
+
+   ```html
+   <script src="chat.js" data-app-key="myapp-mobile"
+           data-api-url="https://chat.yourdomain.com"
+           data-mode="fullscreen"></script>
+   ```
+
+2. Open that page in a WebView (enable JavaScript + DOM storage).
+3. Optional: expose `window.HelpChatNative.close()` from the native bridge so
+   the ✕ button closes the screen — Kotlin/Swift snippets in
+   [widget/integrations/README.md](widget/integrations/README.md).
+
+### Environment-specific config (dev/QA/prod)
+
+Ship the identical `chat.js` everywhere; only a one-line config script differs:
 
 ```html
-<script src="https://your-cdn/chat.v2.js"
-        data-app-key="myapp"
-        data-api-url="https://chat.yourdomain.com"></script>
+<script>window.HelpChatConfig = { appKey: 'myapp', apiUrl: 'https://chat.prod.yourdomain.com' };</script>
+<script src="chat.js"></script>
 ```
 
-**React** — copy `widget/integrations/react/HelpChatWidget.jsx`:
+### Programmatic control (any host)
 
-```jsx
-<HelpChatWidget appKey="myapp" apiUrl="https://chat.yourdomain.com" />
+```js
+HelpChat.open();  HelpChat.toggle();  HelpChat.send('How do I reset my password?');
+HelpChat.identify({ id: 'u1', name: 'Thiru' });   // attach user info to messages
+HelpChat.setContext({ page: location.pathname }); // attach app context
+HelpChat.on('helpchat:message', e => console.log(e.detail));
+HelpChat.resetSession();  HelpChat.destroy();
 ```
 
-**Angular** — copy `widget/integrations/angular/help-chat.service.ts`:
+Full details (events, auth headers, WebView bridges):
+**[widget/integrations/README.md](widget/integrations/README.md)**
 
-```ts
-this.helpChat.init({ appKey: 'myapp', apiUrl: 'https://chat.yourdomain.com' });
-```
+## Helper scripts
 
-**Any other framework** — `chat.js` is a standard custom element:
+| Script | Purpose |
+|---|---|
+| `scripts\start-dev.ps1` (Windows) / `scripts/start-dev.sh` | Starts the backend and the widget demo together, opens the demo page. |
+| `scripts\new-app.ps1 -AppKey myapp -AppName "My App"` | Phase B helper: creates `docs/myapp.md` from a template and prints the exact `AppConfigStore` entry to paste. |
+| `scripts/db/schema.sql` | MySQL schema for when you move off the in-memory stores: `chat_apps`, `chat_messages` (with hourly 24h purge event), `chat_feedback`, plus the demo seed row. |
+| `scripts/db/dynamodb-create-tables.sh [region]` | AWS alternative: creates DynamoDB `chat_apps` + `chat_sessions` (24h TTL via `expires_at`) and seeds the demo app. |
 
-```html
-<help-chat app-key="myapp" api-url="https://chat.yourdomain.com"></help-chat>
-```
-
-**Mobile app (hybrid/WebView)** — same widget, fullscreen mode:
-
-```html
-<script src="https://your-cdn/chat.v2.js"
-        data-app-key="myapp-mobile"
-        data-api-url="https://chat.yourdomain.com"
-        data-mode="fullscreen"></script>
-```
-
-Optional: expose `window.HelpChatNative.close()` from your native bridge
-(JavascriptInterface on Android / WKScriptMessageHandler on iOS) so the
-widget's ✕ button can close the WebView screen — snippets in the
-integrations guide.
-
-**Programmatic control** (any host): `HelpChat.open() / send(text) /
-identify(user) / setContext(ctx) / on('helpchat:message', cb) / destroy()`.
-
-## Onboard a new application
-
-1. Add an entry in `AppConfigStore.java` (appKey, name, theme color, welcome
-   message, suggested questions, system prompt, docs file).
-2. Add its help docs as `resources/docs/<appkey>.md` using `## Heading` sections.
-3. Embed the script tag with that `data-app-key`. Done.
+The database scripts prepare the production storage; the backend currently
+reads from the in-memory stores (`AppConfigStore`, `SessionStore`) — swap
+those two classes to JDBC/DynamoDB when you're ready, the rest is unchanged.
 
 ## API reference
 
