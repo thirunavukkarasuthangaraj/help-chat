@@ -478,10 +478,16 @@
     setContext: function (ctx) { if (this._el) this._el.setContext(ctx); },
     resetSession: function () { if (this._el) this._el.resetSession(); },
 
-    /** Listen to helpchat:* events. Returns an unsubscribe function. */
+    /** Listen to helpchat:* events. Returns an unsubscribe function.
+     *  'helpchat:ready' fires immediately if the config is already loaded,
+     *  so late subscribers never miss it. */
     on: function (event, cb) {
       var target = this._el || document;
       target.addEventListener(event, cb);
+      if (event === 'helpchat:ready' && this._el && this._el._config) {
+        var detail = this._el._config;
+        setTimeout(function () { cb({ type: 'helpchat:ready', detail: detail }); }, 0);
+      }
       return function () { target.removeEventListener(event, cb); };
     },
 

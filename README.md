@@ -218,6 +218,7 @@ Full details (events, auth headers, WebView bridges):
 | `scripts\new-app.ps1 -AppKey myapp -AppName "My App"` | Phase B helper: creates `docs/myapp.md` from a template and prints the exact `AppConfigStore` entry to paste. |
 | `scripts/db/schema.sql` | MySQL schema for when you move off the in-memory stores: `chat_apps`, `chat_messages` (with hourly 24h purge event), `chat_feedback`, plus the demo seed row. |
 | `scripts/db/dynamodb-create-tables.sh [region]` | AWS alternative: creates DynamoDB `chat_apps` + `chat_sessions` (24h TTL via `expires_at`) and seeds the demo app. |
+| `scripts/e2e-widget.js` | Full end-to-end test (18 checks) — real headless Chromium drives the widget against the running backend: config, theming, chips, streaming answers, JS API, events, session persistence. Run: start dev servers, then `npm i playwright-core && node scripts/e2e-widget.js`. |
 
 The database scripts prepare the production storage; the backend currently
 reads from the in-memory stores (`AppConfigStore`, `SessionStore`) — swap
