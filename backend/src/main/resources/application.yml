@@ -1,0 +1,16 @@
+server:
+  # Override per environment: SERVER_PORT=9000 (env var) or --server.port=9000
+  port: ${SERVER_PORT:8090}
+
+helpchat:
+  # Set via environment variable: ANTHROPIC_API_KEY
+  anthropic-api-key: ${ANTHROPIC_API_KEY:}
+  model: claude-sonnet-4-5
+  max-tokens: 1024
+  # Comma-separated origins allowed to embed the widget.
+  # Override per environment: HELPCHAT_ALLOWED_ORIGINS=https://app1.com,https://app2.com
+  allowed-origins: ${HELPCHAT_ALLOWED_ORIGINS:*}
+  # Max messages kept per session (history window sent to the LLM)
+  history-limit: 10
+  # Max characters per user message
+  max-message-length: 2000

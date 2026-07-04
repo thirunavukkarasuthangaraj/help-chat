@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo App — help-chat widget test</title>
+  <style>
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f6f8f8; color: #1c2528;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      background: #fff; padding: 40px 48px; border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.07); max-width: 520px;
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { color: #5b6a6f; line-height: 1.6; }
+    code { background: #eef2f2; padding: 2px 6px; border-radius: 5px; font-size: 13px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .actions button {
+      border: 1px solid #d5dee0; background: #fff; color: #1c2528;
+      border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+    }
+    .actions button:hover { border-color: #0d7377; color: #0d7377; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>This is your host application</h1>
+    <p>The help chat widget was added with a single script tag.
+       Click the teal bubble in the bottom-right corner and try asking:</p>
+    <p><code>How do I reset my password?</code> &nbsp;or&nbsp; <code>What are the pricing plans?</code></p>
+    <p>Make sure the backend is running on <code>http://localhost:8090</code>.</p>
+
+    <p>These buttons use the <code>window.HelpChat</code> JS API — the same one
+       your Angular/React apps would call:</p>
+    <div class="actions">
+      <button onclick="HelpChat.open()">Open</button>
+      <button onclick="HelpChat.toggle()">Toggle</button>
+      <button onclick="HelpChat.send('How do I reset my password?')">Ask about passwords</button>
+      <button onclick="HelpChat.resetSession()">New conversation</button>
+    </div>
+  </div>
+
+  <!-- ⬇ This is the ONLY line each application needs to add -->
+  <script src="chat.js" data-app-key="demo" data-api-url="http://localhost:8090"></script>
+
+  <script>
+    // Example: react to widget events (analytics, logging, etc.)
+    document.addEventListener('helpchat:message', function (e) {
+      console.log('[host app] chat message:', e.detail);
+    });
+    document.addEventListener('helpchat:ready', function (e) {
+      console.log('[host app] widget ready:', e.detail);
+      // Example: attach the signed-in user so the backend can personalize
+      HelpChat.identify({ id: 'demo-user-1', name: 'Demo User' });
+      HelpChat.setContext({ page: location.pathname });
+    });
+  </script>
+</body>
+</html>
