@@ -240,12 +240,32 @@ The database scripts prepare the production storage; the backend currently
 reads from the in-memory stores (`AppConfigStore`, `SessionStore`) — swap
 those two classes to JDBC/DynamoDB when you're ready, the rest is unchanged.
 
+## Deploy (Docker)
+
+```bash
+# backend only, in-memory storage
+docker compose up -d
+
+# backend + MySQL (persistent apps/history/feedback)
+HELPCHAT_STORAGE=jdbc \
+HELPCHAT_DB_URL=jdbc:mysql://mysql:3306/helpchat \
+HELPCHAT_DB_USER=root HELPCHAT_DB_PASSWORD=helpchat-root \
+docker compose --profile mysql up -d
+```
+
+The compose file mounts `./docs` into the container — drop `<appkey>.md`
+files there and answers update within a minute, no rebuild. On EC2: install
+Docker, clone this repo, run the command above, put nginx/ALB with HTTPS in
+front of port 8090, and set `HELPCHAT_ALLOWED_ORIGINS` to your domains.
+
 ## API reference
 
 | Endpoint | Method | Purpose |
 |---|---|---|
+| `/chat/health` | GET | Liveness probe → `{"status":"ok"}` |
 | `/chat/config/{appKey}` | GET | Widget bootstrap: theme, welcome, suggested questions |
 | `/chat/message` | POST | Body `{appKey, sessionId, message}` → SSE stream of `delta` events, ending with `done` |
+| `/chat/feedback` | POST | Body `{appKey, sessionId, rating: "up"\|"down", comment?}` → logged, stored when storage=jdbc |
 
 ## Built-in protections (already on)
 

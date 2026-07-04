@@ -14,6 +14,9 @@ public class Models {
     public record ChatRequest(String appKey, String sessionId, String message,
                               Map<String, Object> user, Map<String, Object> context) {}
 
+    /** 👍/👎 on an answer. rating = "up" | "down". */
+    public record FeedbackRequest(String appKey, String sessionId, String rating, String comment) {}
+
     /** One message in a conversation. role = "user" | "assistant" */
     public record ChatMessage(String role, String content) {}
 

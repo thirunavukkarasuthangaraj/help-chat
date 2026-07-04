@@ -1,0 +1,37 @@
+# help-chat — one command to run the whole thing.
+#
+#   docker compose up -d                     → backend only (memory storage)
+#   docker compose --profile mysql up -d     → backend + MySQL (persistent)
+#
+# Then embed the widget in your apps with data-api-url=http://<this-host>:8090
+services:
+  helpchat:
+    build: ./backend
+    ports:
+      - "8090:8090"
+    environment:
+      # PRODUCTION: set to your real domains, e.g. https://mitturschool.com
+      HELPCHAT_ALLOWED_ORIGINS: "${HELPCHAT_ALLOWED_ORIGINS:-*}"
+      HELPCHAT_STORAGE: "${HELPCHAT_STORAGE:-memory}"
+      HELPCHAT_DB_URL: "${HELPCHAT_DB_URL:-}"
+      HELPCHAT_DB_USER: "${HELPCHAT_DB_USER:-}"
+      HELPCHAT_DB_PASSWORD: "${HELPCHAT_DB_PASSWORD:-}"
+      HELPCHAT_RATE_LIMIT: "${HELPCHAT_RATE_LIMIT:-20}"
+    volumes:
+      # Drop <appkey>.md files here — answers update within a minute, no rebuild
+      - ./docs:/app/docs
+    restart: unless-stopped
+
+  mysql:
+    profiles: ["mysql"]
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-helpchat-root}"
+      MYSQL_DATABASE: helpchat
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./scripts/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

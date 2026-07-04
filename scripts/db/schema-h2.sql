@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_session ON chat_messages (session_id, id);
 
+CREATE TABLE IF NOT EXISTS chat_feedback (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  app_key     VARCHAR(64)  NOT NULL,
+  session_id  VARCHAR(64)  NOT NULL,
+  rating      VARCHAR(8)   NOT NULL,
+  comment     VARCHAR(512) NULL,
+  created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 MERGE INTO chat_apps (app_key, app_name, theme_color, welcome_message,
                       suggested_questions, system_prompt, docs_file)
 KEY (app_key)

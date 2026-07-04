@@ -21,9 +21,14 @@ import java.util.concurrent.Executors;
 @RequestMapping("/chat")
 public class ChatController {
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(ChatController.class);
+
     private final AppConfigStore apps;
     private final ChatService chatService;
     private final RateLimiter rateLimiter;
+    // present only when storage=jdbc — used to persist feedback
+    private final org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcTemplate> jdbcTemplate;
     // bounded: one thread per in-flight SSE reply, capped so a flood can't
     // exhaust server threads
     private final ExecutorService executor = Executors.newFixedThreadPool(64);
@@ -31,10 +36,12 @@ public class ChatController {
     @Value("${helpchat.max-message-length}")
     private int maxMessageLength;
 
-    public ChatController(AppConfigStore apps, ChatService chatService, RateLimiter rateLimiter) {
+    public ChatController(AppConfigStore apps, ChatService chatService, RateLimiter rateLimiter,
+                          org.springframework.beans.factory.ObjectProvider<org.springframework.jdbc.core.JdbcTemplate> jdbcTemplate) {
         this.apps = apps;
         this.chatService = chatService;
         this.rateLimiter = rateLimiter;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /** Liveness probe for load balancers / uptime monitors. */
@@ -64,11 +71,16 @@ public class ChatController {
      * The widget POSTs {appKey, sessionId, message} and reads text/event-stream.
      */
     @PostMapping(value = "/message", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter message(@RequestBody ChatRequest req, HttpServletRequest http) {
+    public SseEmitter message(@RequestBody ChatRequest req, HttpServletRequest http,
+                              jakarta.servlet.http.HttpServletResponse response) {
+        // Keep SSE streaming through reverse proxies (nginx buffers by default)
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache");
+
         SseEmitter emitter = new SseEmitter(120_000L);
 
         AppConfig app = (req.appKey() == null) ? null : apps.get(req.appKey());
-        if (app == null || req.sessionId() == null || req.message() == null
+        if (app == null || !isValidSessionId(req.sessionId()) || req.message() == null
                 || req.message().isBlank() || req.message().length() > maxMessageLength) {
             emitSafely(emitter, "error", "Invalid request.");
             emitter.complete();
@@ -93,6 +105,41 @@ public class ChatController {
             }
         });
         return emitter;
+    }
+
+    /**
+     * 👍/👎 feedback on an answer. Always logged (grep FEEDBACK); also stored
+     * in the chat_feedback table when storage=jdbc.
+     */
+    @PostMapping("/feedback")
+    public ResponseEntity<?> feedback(@RequestBody com.helpchat.model.Models.FeedbackRequest req) {
+        boolean valid = req.appKey() != null && apps.get(req.appKey()) != null
+                && isValidSessionId(req.sessionId())
+                && ("up".equals(req.rating()) || "down".equals(req.rating()))
+                && (req.comment() == null || req.comment().length() <= 512);
+        if (!valid) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid feedback"));
+        }
+        log.info("FEEDBACK appKey={} sessionId={} rating={} comment={}",
+                req.appKey(), req.sessionId(), req.rating(),
+                req.comment() == null ? "" : req.comment());
+        // DB persistence is best-effort — feedback must never fail the request
+        jdbcTemplate.ifAvailable(jdbc -> {
+            try {
+                jdbc.update(
+                    "INSERT INTO chat_feedback (app_key, session_id, rating, comment) VALUES (?, ?, ?, ?)",
+                    req.appKey(), req.sessionId(), req.rating(), req.comment());
+            } catch (Exception e) {
+                log.warn("feedback DB insert failed: {}", e.getMessage());
+            }
+        });
+        return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    /** Session ids are widget-generated: short, alphanumeric. Reject anything else. */
+    private boolean isValidSessionId(String sessionId) {
+        return sessionId != null && sessionId.length() <= 64
+                && sessionId.matches("[A-Za-z0-9_-]+");
     }
 
     private void emitSafely(SseEmitter emitter, String event, String data) {

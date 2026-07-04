@@ -282,6 +282,14 @@
         '    color: var(--hc-primary); text-decoration: underline;\n' +
         '    word-break: break-all;\n' +
         '  }\n' +
+        '  .hc-fb { align-self: flex-start; display: flex; gap: 4px; margin: -4px 0 0 6px; }\n' +
+        '  .hc-fb button {\n' +
+        '    background: transparent; border: none; cursor: pointer;\n' +
+        '    font-size: 13px; padding: 2px 4px; opacity: .45; line-height: 1;\n' +
+        '  }\n' +
+        '  .hc-fb button:hover { opacity: 1; }\n' +
+        '  .hc-fb button.sel { opacity: 1; }\n' +
+        '  .hc-fb button:disabled { cursor: default; }\n' +
         '  .hc-msg.typing::after {\n' +
         '    content: \'\\25CF\\25CF\\25CF\'; letter-spacing: 3px; color: var(--hc-mut);\n' +
         '    animation: hcPulse 1.2s infinite;\n' +
@@ -357,6 +365,9 @@
       this.$('.hc-input').addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); self.send(); }
       });
+      this._panel().addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && self.opts.mode !== 'fullscreen') self.close();
+      });
     }
 
     _addMessage(role, text) {
@@ -397,6 +408,31 @@
     _scrollDown() {
       var m = this.$('.hc-msgs');
       m.scrollTop = m.scrollHeight;
+    }
+
+    /** 👍/👎 under an answer. One click per answer; sent to /chat/feedback. */
+    _addFeedback(replyDiv) {
+      var o = this.opts;
+      var row = document.createElement('div');
+      row.className = 'hc-fb';
+      var self = this;
+      ['up', 'down'].forEach(function (rating) {
+        var b = document.createElement('button');
+        b.textContent = rating === 'up' ? '👍' : '👎';
+        b.setAttribute('aria-label', rating === 'up' ? 'Helpful' : 'Not helpful');
+        b.onclick = function () {
+          row.querySelectorAll('button').forEach(function (x) { x.disabled = true; });
+          b.classList.add('sel');
+          fetch(o.apiUrl + '/chat/feedback', {
+            method: 'POST',
+            headers: self._headers(true),
+            body: JSON.stringify({ appKey: o.appKey, sessionId: self._sessionId, rating: rating })
+          }).catch(function () {});
+          self._emit('helpchat:feedback', { rating: rating });
+        };
+        row.appendChild(b);
+      });
+      replyDiv.after(row);
     }
 
     async send(text) {
@@ -476,6 +512,7 @@
           reply.textContent = 'No response received. Please try again.';
         } else if (reply.textContent) {
           this._linkify(reply);
+          this._addFeedback(reply);
           this._emit('helpchat:message', { role: 'assistant', text: reply.textContent });
         }
       } catch (e) {
