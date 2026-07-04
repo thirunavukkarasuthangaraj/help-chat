@@ -20,11 +20,14 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
+ * OPTIONAL answer engine — only used when helpchat.provider=claude.
+ * The default provider (DocsAnswerProvider) needs no external services.
+ *
  * Minimal Anthropic Messages API client using Java's built-in HttpClient.
  * Streams text deltas to a consumer so the widget can render tokens live.
  */
 @Service
-public class ClaudeClient {
+public class ClaudeClient implements AnswerProvider {
 
     private static final String API_URL = "https://api.anthropic.com/v1/messages";
 
@@ -41,6 +44,17 @@ public class ClaudeClient {
 
     @Value("${helpchat.max-tokens}")
     private int maxTokens;
+
+    @Override
+    public String answer(com.helpchat.model.Models.AppConfig app, String docsContext,
+                         List<ChatMessage> history, Consumer<String> onDelta) throws Exception {
+        String systemPrompt = app.systemPrompt()
+                + "\n\n<help_documentation>\n"
+                + (docsContext == null || docsContext.isBlank()
+                    ? "(no matching documentation found)" : docsContext)
+                + "\n</help_documentation>";
+        return streamCompletion(systemPrompt, history, onDelta);
+    }
 
     /**
      * Sends the conversation to Claude with streaming enabled and pushes each

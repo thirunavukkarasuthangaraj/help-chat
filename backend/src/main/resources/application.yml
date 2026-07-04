@@ -3,7 +3,11 @@ server:
   port: ${SERVER_PORT:8090}
 
 helpchat:
-  # Set via environment variable: ANTHROPIC_API_KEY
+  # Answer engine: "docs" (default — answers from help docs, no external
+  # services, no API keys) or "claude" (optional AI answers, needs the key below)
+  provider: ${HELPCHAT_PROVIDER:docs}
+
+  # Only used when provider=claude. Set via environment variable: ANTHROPIC_API_KEY
   anthropic-api-key: ${ANTHROPIC_API_KEY:}
   model: claude-sonnet-4-5
   max-tokens: 1024

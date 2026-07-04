@@ -1,13 +1,18 @@
-# help-chat — lightweight, reusable AI help chat
+# help-chat — lightweight, reusable help chat
 
 One backend + one embeddable widget that any of your applications (web or mobile)
 can reuse. Each app gets its own theme, welcome message, and knowledge base via
 a single `appKey` config entry.
 
+**No AI required.** By default the backend answers straight from each app's
+help-docs file — no external services, no API keys, zero cost. AI answers
+(Claude) are an optional engine you can switch on later with one config value.
+
 ```
 Web app      → <script> tag (Web Component) ─┐
-Mobile app   → WebView (fullscreen mode)     ├→ Spring Boot chat-service → Claude API + docs RAG
-Any other UI → same REST/SSE API             ─┘
+Mobile app   → WebView (fullscreen mode)     ├→ Spring Boot chat-service → answer engine
+Any other UI → same REST/SSE API             ─┘        │
+                                          docs (default, no AI)  or  claude (optional)
 ```
 
 ## Folder structure
@@ -37,17 +42,14 @@ help-chat/
 
 ## Run it (5 minutes)
 
-Prerequisites: Java 17+, Maven, an Anthropic API key (console.anthropic.com).
+Prerequisites: Java 17+ and Maven. That's all — no API keys needed.
 
 **1. Start the backend**
 
 ```powershell
 cd backend
-$env:ANTHROPIC_API_KEY = "sk-ant-..."     # PowerShell (Windows)
 mvn spring-boot:run
 ```
-
-(Linux/macOS: `export ANTHROPIC_API_KEY=sk-ant-...`)
 
 Backend runs at http://localhost:8090. Quick check:
 http://localhost:8090/chat/config/demo should return JSON.
@@ -60,8 +62,19 @@ python -m http.server 3000     # or any static server
 ```
 
 Open http://localhost:3000/demo.html, click the teal bubble, and ask
-"How do I reset my password?" — the answer streams in from Claude using
-the docs in `backend/src/main/resources/docs/demo.md`.
+"How do I reset my password?" — the answer comes from the matching section
+of `backend/src/main/resources/docs/demo.md`.
+
+## Answer engines (helpchat.provider)
+
+| Engine | Config | What it does |
+|---|---|---|
+| `docs` (default) | nothing to set | Matches the question against the app's help-docs sections and replies with the best ones. FAQ-style, free, fully offline. |
+| `claude` (optional) | `HELPCHAT_PROVIDER=claude` + `ANTHROPIC_API_KEY=sk-ant-...` | AI-generated conversational answers grounded in the same docs. |
+
+Your own engine: implement `AnswerProvider` (one method) — e.g. call your
+existing FAQ service or database — and select it in `ChatService`. The widget
+and API don't change.
 
 ## Add the widget to YOUR app
 
